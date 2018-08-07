@@ -169,3 +169,6 @@ eval(
             :countline => :(linenum += 1),
             :anchor => :(BioCore.ReaderHelper.anchor!(stream, p)),
             :movable_anchor => :(BioCore.ReaderHelper.anchor!(stream, p, false))))))
+
+loadstreaming(f::File{format"FASTA"}) = Reader(open(f, "r"))
+loadstreaming(s::Stream{format"FASTA"}) = Reader(s)
