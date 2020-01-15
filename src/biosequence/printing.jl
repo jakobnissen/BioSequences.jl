@@ -6,16 +6,43 @@ Base.summary(seq::BioSequence{<:RNAAlphabet}) = string(length(seq), "nt ", "RNA 
 Base.summary(seq::BioSequence{<:AminoAcidAlphabet}) = string(length(seq), "aa ", "Amino Acid Sequence")
 Base.summary(seq::BioSequence{<:CharAlphabet}) = string(length(seq), "char ", "Char Sequence")
 
-function Base.print(io::IO, seq::BioSequence; width::Integer = 0)
-    col = 1
+mutable struct SimpleBuffer{T} <: IO
+    arr::Vector{UInt8}
+    len::Int
+    output::T
+end
+
+SimpleBuffer(io::IO) = SimpleBuffer{typeof(io)}(Vector{UInt8}(undef, 1024), 0, io)
+
+function Base.write(sb::SimpleBuffer, byte::UInt8)
+    len = sb.len + 1
+    len > 1024 && flush(sb)
+    sb.len = len
+    @inbounds sb.arr[len] = byte
+end
+
+@noinline function Base.flush(sb::SimpleBuffer)
+    write(sb.output, sb.arr)
+    sb.len = 0
+end
+
+Base.print(io::IO, seq::BioSequence; width::Integer = 0) = _print(io, seq, width)
+
+# Generic method. The different name allows subtypes of BioSequence to
+# selectively call the generic print despite being more specific type
+function _print(io::IO, seq::BioSequence, width::Integer)
+    buffer = SimpleBuffer(io)
+    col = 0
     for x in seq
-        if width > 0 && col > width
-            write(io, '\n')
-            col = 1
-        end
-        print(io, x)
         col += 1
+        print(buffer, x)
+        if col == width
+            write(buffer, '\n')
+            col = 0
+        end
     end
+    flush(buffer)
+    return nothing
 end
 
 Base.show(io::IO, seq::BioSequence) = showcompact(io, seq)
