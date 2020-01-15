@@ -54,6 +54,10 @@ end
     return dst
 end
 
+function Base.copy!(dst::LongSequence{A}, src::LongSequence{A}) where {A}
+    return copyto!(dst, 1, src, 1)
+end
+
 # Dispatch to alphabet type
 function Base.copy!(seq::LongSequence{A}, src) where {A<:Alphabet}
    return copy!(seq, src, codetype(A()))
