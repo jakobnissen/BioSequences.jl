@@ -35,16 +35,23 @@ end
     aa = LongSequence{AminoAcidAlphabet}(6)
     charseq = LongSequence{CharAlphabet}(6)
     for dtype in [Vector{UInt8}, Vector{Char}, String, Test.GenericString]
-        for len in [0, 1, 10, 16, 32, 100, 5]
+        for len in [0, 10, 16, 50, 5]
             test_copy!(dna2, dtype(random_dna(len, probs)))
+            test_copy!(dna2, typeof(dna2)(random_dna(len, probs)))
             test_copy!(dna4, dtype(random_dna(len)))
+            test_copy!(dna4, typeof(dna4)(random_dna(len, probs)))
             test_copy!(rna2, dtype(random_rna(len, probs)))
+            test_copy!(rna2, typeof(rna2)(random_rna(len, probs)))
             test_copy!(rna4, dtype(random_rna(len)))
+            test_copy!(rna4, typeof(rna4)(random_rna(len, probs)))
             test_copy!(aa, dtype(random_aa(len)))
+            test_copy!(aa, typeof(aa)(random_aa(len)))
             test_copy!(charseq, dtype(random_aa(len)))
+            test_copy!(charseq, typeof(charseq)(random_aa(len)))
         end
     end
     test_copy!(charseq, "ϐʌ⨝W")
+    test_copy!(charseq, LongSequence{CharAlphabet}("ϐʌ⨝W"))
 end
 
 @testset "Concatenation" begin
