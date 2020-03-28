@@ -139,24 +139,15 @@ VFMHSIRMIRLMVHRSWKMHSARHVNFIRCQDKKWKSADGIYTDICKYSM
 """
 function randseq(rng::AbstractRNG, A::NucleicAcidAlphabet{4}, len::Integer)
     seq = LongSequence{typeof(A)}(len)
-    randombits = zero(UInt64)
-    # Generate random bases for each of the UInt64 in the .data field:
-    for i in 1:seq_data_len(typeof(A), len)
-        x = zero(UInt64)
-        # 64 bits of randomness is enough for 2x16 4-bit nucleotides
-        if isodd(i)
-            randombits = rand(rng, UInt64)
-        end
-        # Fill each of the 16 bases in the UInt64
-        for nucleotide in 1:16
-            # This is the position of the set bit of the four encoding the base
-            bitposition = (randombits & 3) + 1
-            x <<= bitposition
-            x |= UInt64(1)
-            x <<= 4 - bitposition
-            randombits >>>= 2
-        end
-        @inbounds seq.data[i] = x
+    data = seq.data
+    rand!(rng, data)
+    @inbounds for i in eachindex(data)
+        nuc = 0x1111111111111111
+        mask = data[i]
+        nuc = ((nuc & mask) << 1) | (nuc & ~mask)
+        mask >>>= 1
+        nuc = ((nuc & mask) << 2) | (nuc & ~mask)
+        data[i] = nuc
     end
     return seq
 end
