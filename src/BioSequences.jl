@@ -193,6 +193,13 @@ export
     seqmatrix,
     majorityvote
 
+@static if Sys.WORD_SIZE != 64
+    error(
+        "BioSequences does not yet support 32-bit versions of Julia. " *
+        "Make sure you're running a 64-bit version"
+    )
+end
+
 using BioSymbols
 import Twiddle: enumerate_nibbles,
     count_0000_nibbles,

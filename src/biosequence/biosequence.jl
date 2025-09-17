@@ -37,7 +37,7 @@ Furthermore, mutable sequences should implement
 * `T(undef, ::Int)`
 * `resize!(::T, ::Int)`
 
-For compatibility with existing `Alphabet`s, the encoded data eltype must be `UInt`.
+For compatibility with existing `Alphabet`s, the encoded data eltype must be `UInt64`.
 """
 abstract type BioSequence{A<:Alphabet} end
 
@@ -79,7 +79,7 @@ function has_interface(
         E = encoded_data_eltype(T)
         e = extract_encoded_element(seq, 1)
         e isa E || return false
-        (!compat || E == UInt) || return false
+        (!compat || E == UInt64) || return false
         copy(seq) isa typeof(seq) || return false
         if mutable
             encoded_setindex!(seq, e, 1)

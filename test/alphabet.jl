@@ -85,8 +85,8 @@ function BioSequences.encode(::ReducedAAAlphabet, aa::AminoAcid)
     ENC_LUT[i + 0x01] % UInt
 end
 
-function BioSequences.decode(::ReducedAAAlphabet, x::UInt)
-    DEC_LUT[x + UInt(1)]
+function BioSequences.decode(::ReducedAAAlphabet, x::Unsigned)
+    DEC_LUT[UInt(x) + UInt(1)]
 end
 
 @testset "Custom Alphabet" begin
