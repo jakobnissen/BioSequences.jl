@@ -5,41 +5,179 @@
 ### License is MIT: https://github.com/BioJulia/BioSequences.jl/blob/master/LICENSE.md
 
 """
-    BioSequence{A <: Alphabet}
+    abstract type BioSequence{A <: Alphabet}
 
-`BioSequence` is the main abstract type of `BioSequences`.
-It abstracts over the internal representation of different biological sequences,
-and is parameterized by an `Alphabet`, which controls the element type.
+A `BioSequence` stores `BioSymbol`s in a linear container, to represent polymer
+molecules such as DNA, RNA, or proteins.
+The default `BioSequence` type is `LongSequence{A}`.
+
+See also: [`Alphabet`](@ref), [`LongSequence`](@ref)
 
 # Extended help
-Its subtypes are characterized by:
-* Being a linear container type with random access and indices `Base.OneTo(length(x))`.
-* Containing zero or more internal data elements of type `encoded_data_eltype(typeof(x))`.
-* Being associated with an `Alphabet`, `A` by being a subtype of `BioSequence{A}`.
+The associated `Alphabet` type controls which `BioSymbol`s can be stored in the
+`BioSequence`, and how these symbols are encoded to a binary encoding.
+The `BioSequence` instance then handles the storage and retrieval of these
+binary encodings.
 
-A `BioSequence{A}` is indexed by an integer. The biosequence subtype, the index
-and the alphabet `A` determine how to extract the internal encoded data.
-The alphabet decides how to decode the data to the element type of the biosequence.
-Hence, the element type and container type of a `BioSequence` are separated.
+!!! warning
+    Decoding may assume the encoding is invalid, so a `BioSequence` may
+    **never** give an invalid encoding to a user.
+    This implies that `BioSequence`s that allow uninitialized data must
+    either do so through `unsafe_` functions, or validate encodings before
+    passing them onto decoding functions.
 
-Subtypes `T` of `BioSequence` must implement the following, with `E` begin an
-encoded data type:
+Subtypes of `BioSequence` must follow the below semantics:
+* They should be indexable by `Int`, with indices `Base.OneTo(length(x))`
+* They have an `Int` length, and iterating them is equivalent to indexing
+  each of their elements in order, similar to a `Vector`
 
-* `Base.length(::T)::Int`
-* `encoded_data_eltype(::Type{T})::Type{E}`
-* `extract_encoded_element(::T, ::Integer)::E`
-* `copy(::T)`
-* T must be able to be constructed from any iterable with `length` defined and
+Subtypes `S <: BioSequence` must implement:
+* `Base.length(::S)::Int`
+* `unsafe_get_encoding(::S, ::Int)::UInt64`
+* Instances of `S` must be constructable from any iterable with `length` defined and
   with a known, compatible element type.
+* `Base.copy(::S)::S`
 
-Furthermore, mutable sequences should implement
-* `encoded_setindex!(::T, ::E, ::Integer)`
-* `T(undef, ::Int)`
-* `resize!(::T, ::Int)`
-
-For compatibility with existing `Alphabet`s, the encoded data eltype must be `UInt`.
+Mutable `BioSequence`s ought to define
+* `unsafe_set_encoding!(::S, ::UInt64, ::Int)`
+* `truncate!`
+* `unsafe_resize!`
+* `view`, or `fill_resize!`
+* `fill_encoding!`
 """
-abstract type BioSequence{A<:Alphabet} end
+abstract type BioSequence{A <: Alphabet} end
+
+# Specific biosequences
+"An alias for `BioSequence{<:NucleicAcidAlphabet}`"
+const NucSeq = BioSequence{<:NucleicAcidAlphabet}
+
+"An alias for `BioSequence{DNAAlphabet{N}}`"
+const DNASeq{N} = BioSequence{DNAAlphabet{N}}
+
+"An alias for `BioSequence{RNAAlphabet{N}}`"
+const RNASeq{N} = BioSequence{RNAAlphabet{N}}
+
+"An alias for `BioSequence{AminoAcidAlphabet}`"
+const AASeq = BioSequence{AminoAcidAlphabet}
+
+Base.eachindex(x::BioSequence) = Base.OneTo(length(x))
+Base.firstindex(::BioSequence) = 1
+Base.lastindex(x::BioSequence) = length(x)
+Base.keys(seq::BioSequence) = eachindex(seq)
+Base.nextind(::BioSequence, i::Integer) = Int(i) + 1
+Base.prevind(::BioSequence, i::Integer) = Int(i) - 1
+Base.eltype(::Type{<:BioSequence{A}}) where {A <: Alphabet} = eltype(A)
+
+Alphabet(::Type{<:BioSequence{A}}) where {A <: Alphabet} = A()
+Alphabet(x::BioSequence) = Alphabet(typeof(x))
+
+Base.isempty(x::BioSequence) = iszero(length(x))
+Base.empty(::Type{T}) where {T <: BioSequence} = T(eltype(T)[])
+Base.empty(x::BioSequence) = empty(typeof(x))
+
+BitsPerSymbol(x::BioSequence) = BitsPerSymbol(Alphabet(typeof(x)))
+bits_per_symbol(::Type{T}) where {T <: BioSequence} = bits_per_symbol(Alphabet(T))
+bits_per_symbol(x::BioSequence) = bits_per_symbol(typeof(x))
+
+"""
+    unsafe_get_encoding(s::BioSequence, i::Int)::UInt64
+
+Extract the encoding of `s` at index `i`.
+Subtypes of `BioSequence` must ensure this function never returns
+an invalid encoding for the alphabet of `s`.
+
+!!! warning
+    This function does not boundscheck, and may result in undefined
+    behaviour if `i` is out of bounds.
+
+See also: [`unsafe_set_encoding!`]
+"""
+function unsafe_get_encoding end
+
+"""
+    unsafe_set_encoding!(s::BioSequence, enc::UInt64, i::Int) -> s
+
+Store the encoding `enc` at index `i` in `s`. This operation is what
+is responsible for `setindex!` of biosequences.
+
+!!! warning
+    This function must be called with an inbounds `i`.
+    Furthermore, it assumes `enc` is a valid encoding in the alphabet
+    of `s`. If either condition is violated, undefined behaviour may result.
+
+See also: [`unsafe_get_encoding`]
+"""
+function unsafe_set_encoding! end
+
+"""
+    unsafe_undef_biosequence(T::Type{<:BioSequence}, len::UInt)::T
+
+Create an unitialized `BioSequence` of type `T` and length `len`.
+
+!!! warning
+  This function is unsafe, because `BioSequence`s must never load
+  symbols from invalid encodings.
+  Hence, valid use of this function requires the caller to fill in
+  all used coding bits of the sequence with a valid value.
+"""
+function unsafe_undef_biosequence end
+
+"""
+    unsafe_resize!(x::BioSequence, len::UInt) -> x
+
+Resize `x` to length `len`. If `len` is shorter than the current length,
+truncate the sequence. If `len` is larger, add new elements, which may be
+uninitialized.
+
+!!! warning
+  This function is unsafe, because `BioSequence`s must never load
+  symbols from invalid encodings.
+  Hence, valid use of this function requires the caller to fill in
+  all used coding bits of the sequence with a valid value.
+"""
+function unsafe_resize! end
+
+"""
+    fill_resize!(x::BioSequence, sym::BioSymbol, len::UInt)
+
+Resize `x` to length `len`. If `len` is shorter than the current length,
+truncate the sequence. If `len` is larger, push `sym` elements to the end
+until length matches.
+"""
+function fill_resize!(x::BioSequence, sym::BioSymbol, len::UInt)
+    oldlen = (length(x) % UInt)
+    len == oldlen && return x
+    len < oldlen && return @inbounds truncate!(x, len)
+    enc = encode(Alphabet(x), sym)::UInt64
+    unsafe_resize!(x, len)
+    vw = @inbounds view(x, ((oldlen + 1) % Int):(len % Int))
+    fill_encoding!(vw, enc)
+    return x
+end
+
+
+function fill!(x::BioSequence, sym::BioSymbol)
+    enc = encode(Alphabet(x), sym)::UInt64
+    fill_encoding!(x, enc)
+end
+
+function fill_encoding!(x::BioSequence, enc::UInt64)
+    for i in eachindex(x)
+        unsafe_set_encoding!(x, enc, i)
+    end
+    return x
+end
+
+"""
+    truncate!(x::BioSequence, len::UInt) -> x
+
+Truncate `x` to length `len`. If `len` is larger than the current length,
+throw a `BoundsError`
+"""
+function truncate! end
+#=
+
+
 
 function (::Type{S})(seq::BioSequence) where {S <: AbstractString}
     _string(S, seq, codetype(Alphabet(seq)))
@@ -92,24 +230,6 @@ function has_interface(
     end
     return true
 end
-
-Base.eachindex(x::BioSequence) = Base.OneTo(length(x))
-Base.firstindex(::BioSequence) = 1
-Base.lastindex(x::BioSequence) = length(x)
-Base.keys(seq::BioSequence) = eachindex(seq)
-Base.nextind(::BioSequence, i::Integer) = Int(i) + 1
-Base.prevind(::BioSequence, i::Integer) = Int(i) - 1
-Base.size(x::BioSequence) = (length(x),)
-Base.eltype(::Type{<:BioSequence{A}}) where {A <: Alphabet} = eltype(A)
-Alphabet(::Type{<:BioSequence{A}}) where {A <: Alphabet} = A()
-Alphabet(x::BioSequence) = Alphabet(typeof(x))
-Base.isempty(x::BioSequence) = iszero(length(x))
-Base.empty(::Type{T}) where {T <: BioSequence} = T(eltype(T)[])
-Base.empty(x::BioSequence) = empty(typeof(x))
-BitsPerSymbol(x::BioSequence) = BitsPerSymbol(Alphabet(typeof(x)))
-bits_per_symbol(::Type{T}) where {T <: BioSequence} = bits_per_symbol(Alphabet(T))
-bits_per_symbol(x::BioSequence) = bits_per_symbol(typeof(x))
-Base.hash(s::BioSequence, x::UInt) = foldl((a, b) -> hash(b, a), s, init=x)
 
 function Base.similar(seq::BioSequence, len::Integer=length(seq))
     return typeof(seq)(undef, len)
@@ -190,58 +310,6 @@ function Base.:*(fst::BioSequence, rest::BioSequence...)
     join(T, (fst, rest...))
 end
 
-"""
-    encoded_data_eltype(::Type{<:BioSequence})
-
-Returns the element type of the encoded data of the `BioSequence`.
-This is the return type of `extract_encoded_element`, i.e. the data
-type that stores the biological symbols in the biosequence.
-
-See also: [`BioSequence`](@ref) 
-"""
-function encoded_data_eltype end
-
-"""
-    extract_encoded_element(::BioSequence{A}, i::Integer)
-
-Returns the encoded element at position `i`. This data can be
-decoded using `decode(A(), data)` to yield the element type of
-the biosequence.
-
-See also: [`BioSequence`](@ref) 
-"""
-function extract_encoded_element end
-
-
-"""
-    encoded_setindex!(seq::BioSequence, x::E, i::Integer)
-
-Given encoded data `x` of type `encoded_data_eltype(typeof(seq))`,
-sets the internal sequence data at the given index.
-
-See also: [`BioSequence`](@ref) 
-"""
-function encoded_setindex! end
-
-# Specific biosequences
-"""
-An alias for `BioSequence{<:NucleicAcidAlphabet}`
-"""
-const NucleotideSeq = BioSequence{<:NucleicAcidAlphabet}
-
-"An alias for `BioSequence{<:NucleicAcidAlphabet}`"
-const NucSeq{N} = BioSequence{<:NucleicAcidAlphabet{N}}
-
-"An alias for `BioSequence{DNAAlphabet{N}}`"
-const DNASeq{N} = BioSequence{DNAAlphabet{N}}
-
-"An alias for `BioSequence{RNAAlphabet{N}}`"
-const RNASeq{N} = BioSequence{RNAAlphabet{N}}
-
-"""
-An alias for `BioSequence{AminoAcidAlphabet}`
-"""
-const AASeq = BioSequence{AminoAcidAlphabet}
 
 # The generic functions for any BioSequence...
 include("indexing.jl")
@@ -250,3 +318,5 @@ include("find.jl")
 include("printing.jl")
 include("transformations.jl")
 include("copying.jl")
+
+=#

@@ -7,6 +7,62 @@
 
 module BioSequences
 
+import BioSymbols: BioSymbol,
+    AminoAcid,
+    DNA,
+    RNA
+
+include("alphabets/alphabet.jl")
+include("alphabets/nucleicacidalphabets.jl")
+include("alphabets/aminoacidalphabet.jl")
+include("alphabets/alphabet_utils.jl")
+
+include("biosequence/biosequence.jl")
+include("biosequence/indexing.jl")
+
+include("sequences/sequences.jl")
+include("sequences/chunk_iterators.jl")
+
+export Alphabet,
+    NucleicAcidAlphabet,
+    DNAAlphabet,
+    RNAAlphabet,
+    AminoAcidAlphabet,
+
+    BioSequence,
+    LongSequence,
+    LongSubSeq,
+    ResizableSeq,
+    NucSeq,
+    DNASeq,
+    RNASeq,
+    AASeq,
+    LongDNA,
+    LongRNA,
+    LongAA
+
+public BitsPerSymbol,
+    iscomplete,
+    AlphabetCode,
+    ASCIIAlphabet,
+    GenericAlphabetCode,
+    EncodingScheme,
+    GenericEncoding,
+    CopyableEncoding,
+    ASCIIEncoding,
+    TwoToFour,
+    FourToTwo,
+    EncodeError,
+    tryencode,
+    encode,
+    decode,
+    try_ascii_encode
+    ascii_decode
+
+
+
+#=
+
 export
     ###
     ### Symbols
@@ -206,8 +262,6 @@ import Twiddle: enumerate_nibbles,
     repeatpattern
 using Random
 
-include("alphabet.jl")
-
 # Load the bit-twiddling internals that optimised BioSequences methods depend on.
 include("bit-manipulation/bitindex.jl")
 include("bit-manipulation/bit-manipulation.jl")
@@ -316,5 +370,6 @@ function Base.findall(pat, seq::BioSequence, rng::UnitRange{Int}; overlap::Bool 
 end
 
 include("workload.jl")
+=#
 
 end  # module BioSequences
