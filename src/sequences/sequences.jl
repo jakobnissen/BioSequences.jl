@@ -101,6 +101,8 @@ struct LongSubSeq{A <: Alphabet} <: BioSequence{A}
     end
 end
 
+const HeapSeq{A} = Union{LongSequence{A}, ResizableSeq{A}, LongSubSeq{A}}
+
 @inline function left_shift(x::Unsigned, n::Integer)
     return x << (n & ((sizeof(x) * 8) - 1))
 end

@@ -19,9 +19,13 @@ include("alphabets/alphabet_utils.jl")
 
 include("biosequence/biosequence.jl")
 include("biosequence/indexing.jl")
+include("biosequence/writing.jl")
 
 include("sequences/sequences.jl")
 include("sequences/chunk_iterators.jl")
+include("sequences/construction.jl")
+
+
 
 export Alphabet,
     NucleicAcidAlphabet,
@@ -58,7 +62,6 @@ public BitsPerSymbol,
     decode,
     try_ascii_encode
     ascii_decode
-
 
 
 #=

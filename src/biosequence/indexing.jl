@@ -42,7 +42,13 @@ function Base.getindex(x::BioSequence, i::Integer)
 end
 
 function inbounds_copy_element!(dst::BioSequence, di::Int, src, si::Int)
-    inbounds_copy_element!(EncodingScheme(Alphabet(dst), typeof(src)), di, src, si)
+    scheme = EncodingScheme(Alphabet(dst), typeof(src))
+    inbounds_copy_element!(
+        scheme,
+        di,
+        to_decoding_source(scheme, src),
+        si,
+    )
 end
 
 function inbounds_copy_element!(
@@ -72,17 +78,19 @@ function inbounds_copy_element!(
         ::ASCIIEncoding,
         dst::BioSequence,
         di::Int,
-        src,
+        # N.B: The `to_decoding_source` should have transformed
+        # any ASCIIEncoding source to an `AbstractVector{UInt8}` here
+        src::AbstractVector{UInt8},
         si::Int
     )
-    byte = src[si]::UInt8
+    byte = src[si]
     enc = try_ascii_encode(Alphabet(dst), byte)
-    isnothing(enc) && throw_byte_encoding(Alphabet(dst), byte)
+    isnothing(enc) && throw_byte_encoding(Alphabet(dst), byte, si)
     unsafe_set_encoding!(dst, enc, di)
 end
 
-@noinline function throw_byte_encoding(A::Alphabet, byte::UInt8)
-    throw(EncodeError(A, Char(byte)))
+@noinline function throw_byte_encoding(A::Alphabet, byte::UInt8, si::Int)
+    throw(EncodeError(A, Char(byte), si))
 end
 
 function inbounds_copy_element!(

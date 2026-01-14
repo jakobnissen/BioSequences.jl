@@ -27,6 +27,8 @@ See also: [`BioSequence`](@ref)
 * Alphabets define a *finite* set of biological symbols.
 * The alphabet controls the encoding from a `BioSymbol` of the alphabet's element type,
   to an `UInt64`, as well as the decoding, the inverse process.
+* Encoding is bijective: A symbol may only encode to one encoding, and one encoding
+  only decodes to one symbol
 * An `Alphabet`'s `encode` method must not produce invalid data.
 
 ### Required methods
@@ -162,6 +164,8 @@ Note that this trait only implies compatible encoding for each individual biosym
 """
 struct CopyableEncoding <: EncodingScheme end
 
+EncodingScheme(::A, ::Type{<:BioSequence{A}}) where {A <: Alphabet} = CopyableEncoding()
+
 """
     ASCIIEncoding <: EncodingScheme
 
@@ -196,7 +200,7 @@ end
 end
 
 """
-    EncodeError{A <: Alphabet, T}(::T) <: Exception
+    EncodeError(A::Alphabet, val::T, idx::Integer)
 
 Exception thrown when a `BioSymbol` cannot be encoded to a given [`Alphabet`](@ref).
 
@@ -212,9 +216,28 @@ true
 """
 struct EncodeError{A <: Alphabet, T} <: Exception
     val::T
+
+    # One-based index of the source sequence where the bad symbol was found.
+    # If not applicable (e.g. a single symbol was encoded), set to zero
+    idx::Int
 end
 
-EncodeError(::A, val::T) where {A, T} = EncodeError{A, T}(val)
+function EncodeError(::A, val::T, idx::Integer) where {A, T}
+    return EncodeError{A, T}(val, Int(idx)::Int)
+end
+
+# TODO: Improve this
+function Base.showerror(io::IO, err::EncodeError{A}) where {A}
+    val = err.val
+    char_repr = if val isa Integer && val < 0x80
+        repr(val) * " (Char '" * Char(val) * "')"
+    elseif val isa Union{AbstractString, AbstractChar}
+        repr(val)
+    else
+        string(err.val)
+    end
+    return print(io, "cannot encode " * char_repr * " in ", A)
+end
 
 """
     encode(A::Alphabet, s::BioSymbol)::UInt64
@@ -228,7 +251,7 @@ Users should generally override [`tryencode`](@ref) instead.
 """
 function encode(A::Alphabet, s::BioSymbol)
     y = tryencode(A, s)
-    return y === nothing ? throw(EncodeError(A, s)) : y
+    return y === nothing ? throw(EncodeError(A, s, 0)) : y
 end
 
 """
@@ -240,18 +263,6 @@ The encoding must be a `UInt64`, where the all but the lower N bits are unset,
 where N is the number of bits per symbol.
 """
 function tryencode end
-
-function Base.showerror(io::IO, err::EncodeError{A}) where {A}
-    val = err.val
-    char_repr = if val isa Integer && val < 0x80
-        repr(val) * " (Char '" * Char(val) * "')"
-    elseif val isa Union{AbstractString, AbstractChar}
-        repr(val)
-    else
-        string(err.val)
-    end
-    return print(io, "cannot encode " * char_repr * " in ", A)
-end
 
 """
 	try_ascii_encode(::Alphabet, b::UInt8)::Union{Nothing, UInt64}
@@ -304,3 +315,28 @@ to this function may result in undefined behaviour.
 See also: [`BioSequences.encode`](@ref), [`Alphabet`](@ref)
 """
 function decode end
+
+"""
+    to_decoding_source(scheme::EncodingScheme, x::T)::S
+
+Construct an object suitable to acting as a decoding source in `scheme`.
+
+This function is called on `x`, when constructing `BioSequence`s from `x`.
+By default, it returns the input argument.
+However, strings, and some certain `BioSequence` types can be cast as a
+different, more easily parseable source without runtime cost.
+"""
+to_decoding_source(::EncodingScheme, x) = x
+
+to_decoding_source(::ASCIIEncoding, x::Union{String, SubString{String}}) = codeunits(x)
+
+@static if isdefined(Base, :StringView)
+    function to_decoding_source(
+            ::ASCIIEncoding,
+            x::Union{StringView, SubString{<:StringView}},
+        )
+        codeunits(x)
+    end
+end
+
+# TODO: InlineStrings and StringViews extension here.
